@@ -16,7 +16,10 @@
     "build": "tsc && vite build && chmod +x dist/bin.js",
     "upload": "pnpm build && npm publish --access public",
     "format": "prettier --write \"src/**/*.ts\"",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "sequence",
@@ -52,7 +55,8 @@
     "rimraf": "^4.4.1",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "0xsequence": "2.3.39",
