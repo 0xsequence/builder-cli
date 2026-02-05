@@ -1,0 +1,65 @@
+{
+  "name": "@0xsequence/builder-cli",
+  "version": "0.1.0",
+  "description": "CLI for Sequence Builder - designed for AI agents and automation",
+  "main": "./dist/bin.js",
+  "type": "module",
+  "bin": {
+    "sequence-builder": "./dist/bin.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "tsc": "tsc -p tsconfig.json",
+    "dev": "tsx src/bin.ts",
+    "build": "tsc && vite build && chmod +x dist/bin.js",
+    "upload": "pnpm build && npm publish --access public",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "sequence",
+    "builder",
+    "cli",
+    "0xsequence",
+    "wallet",
+    "ethereum",
+    "web3",
+    "ai-agents"
+  ],
+  "author": "Sequence Platforms Inc.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xsequence/builder-cli.git"
+  },
+  "homepage": "https://github.com/0xsequence/builder-cli#readme",
+  "bugs": {
+    "url": "https://github.com/0xsequence/builder-cli/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.6",
+    "prettier": "^3.3.3",
+    "rimraf": "^4.4.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  },
+  "dependencies": {
+    "0xsequence": "2.3.39",
+    "@0xsequence/auth": "2.3.39",
+    "@0xsequence/network": "2.3.39",
+    "@0xsequence/relayer": "2.3.39",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "ethers": "^6.13.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "packageManager": "pnpm@10.10.0"
+}

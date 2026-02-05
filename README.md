@@ -1,0 +1,253 @@
+# Sequence Builder CLI
+
+CLI for Sequence Builder - designed for AI agents and automation. Create wallets, authenticate, manage projects, and send transactions from the command line.
+
+## Quick Start
+
+Run any command directly with `npx`:
+
+```bash
+npx @0xsequence/builder-cli --help
+```
+
+Or install globally:
+
+```bash
+npm install -g @0xsequence/builder-cli
+sequence-builder --help
+```
+
+## Quick Start for Agents
+
+```bash
+# 1. Generate a wallet
+npx @0xsequence/builder-cli create-wallet
+
+# 2. Store the private key securely (shown in output)
+
+# 3. Fund the wallet with native token for gas fees
+
+# 4. Login with your private key
+npx @0xsequence/builder-cli login -k <your-private-key>
+
+# 5. Create a project
+npx @0xsequence/builder-cli projects create "My Project"
+
+# 6. Get your API keys
+npx @0xsequence/builder-cli apikeys <project-id>
+
+# 7. Send an ERC20 transfer
+npx @0xsequence/builder-cli transfer \
+  -k <private-key> \
+  -a <access-key> \
+  -t <token-address> \
+  -r <recipient> \
+  -m <amount> \
+  -c <chain-id>
+```
+
+## Commands
+
+| Command                        | Description                                                      |
+| ------------------------------ | ---------------------------------------------------------------- |
+| `create-wallet`                | Generate new EOA keypair, display private key and wallet address |
+| `login -k <key>`               | Authenticate with private key, get JWT                           |
+| `projects`                     | List all projects                                                |
+| `projects create [name]`       | Create new project                                               |
+| `projects get <id>`            | Get project details                                              |
+| `apikeys <project-id>`         | List API keys                                                    |
+| `apikeys default <project-id>` | Get default API key                                              |
+| `transfer`                     | Send ERC20 transfer                                              |
+
+## Create Wallet
+
+Generate a new wallet for use with Sequence Builder:
+
+```bash
+npx @0xsequence/builder-cli create-wallet
+```
+
+Output:
+
+```
+✓ Wallet created successfully!
+
+Private Key: 0x4c0883a69102937d6231471b5dbb6204fe512961708279f9f4e7d1b3e6d1e3a1
+Address:     0x89D9F8f31817BAdb5D718CD6fb483b71DbD2dfeD
+
+IMPORTANT: Store these credentials securely. They will not be shown again.
+
+To use this wallet:
+  1. Fund it with native token for gas fees
+  2. Run: sequence-builder login -k <your-private-key>
+```
+
+## Login
+
+Authenticate with Sequence Builder using your private key:
+
+```bash
+npx @0xsequence/builder-cli login -k 0x4c0883a69102937d6231471b5dbb6204fe5129617...
+```
+
+Options:
+
+- `-k, --private-key <key>` - Your wallet private key (required)
+- `-e, --email <email>` - Email address to associate with your account
+- `--env <environment>` - Environment (prod, dev)
+
+## Projects
+
+### List Projects
+
+```bash
+npx @0xsequence/builder-cli projects
+```
+
+### Create Project
+
+```bash
+npx @0xsequence/builder-cli projects create "My Game"
+```
+
+Options:
+
+- `--chain-ids <ids>` - Comma-separated list of chain IDs
+
+### Get Project Details
+
+```bash
+npx @0xsequence/builder-cli projects get 12345
+```
+
+## API Keys
+
+### List API Keys
+
+```bash
+npx @0xsequence/builder-cli apikeys 12345
+```
+
+### Get Default API Key
+
+```bash
+npx @0xsequence/builder-cli apikeys default 12345
+```
+
+## Transfer (ERC20)
+
+Send an ERC20 token transfer:
+
+```bash
+npx @0xsequence/builder-cli transfer \
+  -k 0x4c0883a... \
+  -a AQAAAAAAAABnD... \
+  -t 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174 \
+  -r 0x1234567890123456789012345678901234567890 \
+  -m 10.5 \
+  -c 137
+```
+
+Options:
+
+- `-k, --private-key <key>` - Your wallet private key (required)
+- `-a, --access-key <key>` - Project access key (required)
+- `-t, --token <address>` - ERC20 token contract address (required)
+- `-r, --recipient <address>` - Recipient address (required)
+- `-m, --amount <amount>` - Amount to send in token units (required)
+- `-c, --chain-id <chainId>` - Chain ID (required)
+
+## JSON Output Mode
+
+All commands support `--json` flag for machine-readable output:
+
+```bash
+npx @0xsequence/builder-cli projects --json
+npx @0xsequence/builder-cli apikeys 12345 --json
+npx @0xsequence/builder-cli create-wallet --json
+```
+
+Example JSON output:
+
+```json
+{
+  "privateKey": "0x4c0883a...",
+  "address": "0x89D9F8f..."
+}
+```
+
+## Exit Codes
+
+| Code | Meaning             |
+| ---- | ------------------- |
+| 0    | Success             |
+| 1    | General error       |
+| 10   | Not logged in       |
+| 11   | Invalid private key |
+| 20   | Insufficient funds  |
+| 30   | No projects found   |
+| 31   | Project not found   |
+| 40   | API error           |
+
+## Configuration
+
+Configuration is stored in `~/.sequence-builder/config.json`:
+
+- JWT token for authentication
+- Environment settings
+
+**Note**: Private keys are NOT stored. You must provide them with each command that requires signing.
+
+## Environment Support
+
+```bash
+# Use production (default)
+npx @0xsequence/builder-cli login -k <key> --env prod
+
+# Use development
+npx @0xsequence/builder-cli login -k <key> --env dev
+
+# Use custom API URL
+npx @0xsequence/builder-cli login -k <key> --api-url https://custom-api.example.com
+```
+
+## Requirements
+
+- Node.js 18+ (recommended)
+
+## Local Development
+
+```bash
+# Clone and install
+cd cli
+pnpm install
+
+# Run in development mode
+pnpm dev create-wallet
+pnpm dev login -k <key>
+pnpm dev projects
+
+# Build
+pnpm build
+```
+
+## Publishing
+
+```bash
+# Bump version
+npm version patch  # or: minor | major
+
+# Build and publish (single command)
+pnpm upload
+
+# Or manually:
+pnpm build
+npm publish --access public
+
+# Push tags
+git push origin main --tags
+```
+
+## License
+
+MIT — see the [LICENSE](LICENSE) file for details.
