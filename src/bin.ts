@@ -9,6 +9,7 @@ import {projectsCommand} from "./commands/projects.js";
 import {apikeysCommand} from "./commands/apikeys.js";
 import {transferCommand} from "./commands/transfer.js";
 import {walletInfoCommand} from "./commands/wallet-info.js";
+import {indexerCommand} from "./commands/indexer.js";
 
 const program = new Command();
 
@@ -24,6 +25,7 @@ program.addCommand(loginCommand);
 program.addCommand(projectsCommand);
 program.addCommand(apikeysCommand);
 program.addCommand(transferCommand);
+program.addCommand(indexerCommand);
 
 // Note: --json, --env, and --api-url are defined on each subcommand
 // This allows subcommands to properly receive and handle these options

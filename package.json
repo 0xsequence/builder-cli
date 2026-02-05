@@ -1,7 +1,7 @@
 {
   "name": "@0xsequence/builder-cli",
   "version": "0.1.0",
-  "description": "CLI for Sequence Builder - designed for AI agents and automation",
+  "description": "CLI for Sequence Builder - manage wallets, projects, transfers, and query blockchain data. Designed for AI agents and automation.",
   "main": "./dist/bin.js",
   "type": "module",
   "bin": {
@@ -26,7 +26,12 @@
     "wallet",
     "ethereum",
     "web3",
-    "ai-agents"
+    "ai-agents",
+    "smart-wallet",
+    "indexer",
+    "erc20",
+    "transfer",
+    "blockchain"
   ],
   "author": "Sequence Platforms Inc.",
   "license": "MIT",
@@ -52,6 +57,7 @@
   "dependencies": {
     "0xsequence": "2.3.39",
     "@0xsequence/auth": "2.3.39",
+    "@0xsequence/indexer": "^2.3.39",
     "@0xsequence/network": "2.3.39",
     "@0xsequence/relayer": "2.3.39",
     "chalk": "^5.3.0",
