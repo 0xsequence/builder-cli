@@ -1,21 +1,21 @@
-import {ethers} from "ethers";
-import {Session} from "@0xsequence/auth";
-import {networks, ChainId} from "@0xsequence/network";
+import { ethers } from 'ethers'
+import { Session } from '@0xsequence/auth'
+import { networks, ChainId } from '@0xsequence/network'
 
 export interface WalletInfo {
-  privateKey: string;
-  address: string;
+  privateKey: string
+  address: string
 }
 
 /**
  * Generate a new random EOA wallet
  */
 export function generateWallet(): WalletInfo {
-  const wallet = ethers.Wallet.createRandom();
+  const wallet = ethers.Wallet.createRandom()
   return {
     privateKey: wallet.privateKey,
-    address: wallet.address
-  };
+    address: wallet.address,
+  }
 }
 
 /**
@@ -23,16 +23,16 @@ export function generateWallet(): WalletInfo {
  */
 export function isValidPrivateKey(privateKey: string): boolean {
   try {
-    if (!privateKey.startsWith("0x")) {
-      privateKey = "0x" + privateKey;
+    if (!privateKey.startsWith('0x')) {
+      privateKey = '0x' + privateKey
     }
     if (privateKey.length !== 66) {
-      return false;
+      return false
     }
-    new ethers.Wallet(privateKey);
-    return true;
+    new ethers.Wallet(privateKey)
+    return true
   } catch {
-    return false;
+    return false
   }
 }
 
@@ -40,21 +40,21 @@ export function isValidPrivateKey(privateKey: string): boolean {
  * Get wallet address from private key
  */
 export function getAddressFromPrivateKey(privateKey: string): string {
-  if (!privateKey.startsWith("0x")) {
-    privateKey = "0x" + privateKey;
+  if (!privateKey.startsWith('0x')) {
+    privateKey = '0x' + privateKey
   }
-  const wallet = new ethers.Wallet(privateKey);
-  return wallet.address;
+  const wallet = new ethers.Wallet(privateKey)
+  return wallet.address
 }
 
 /**
  * Get ethers Wallet instance from private key
  */
 export function getWallet(privateKey: string): ethers.Wallet {
-  if (!privateKey.startsWith("0x")) {
-    privateKey = "0x" + privateKey;
+  if (!privateKey.startsWith('0x')) {
+    privateKey = '0x' + privateKey
   }
-  return new ethers.Wallet(privateKey);
+  return new ethers.Wallet(privateKey)
 }
 
 /**
@@ -66,16 +66,16 @@ export async function createSession(
   accessKey: string,
   chainId?: number
 ): Promise<Session> {
-  if (!privateKey.startsWith("0x")) {
-    privateKey = "0x" + privateKey;
+  if (!privateKey.startsWith('0x')) {
+    privateKey = '0x' + privateKey
   }
 
   const session = await Session.singleSigner({
     signer: privateKey,
-    projectAccessKey: accessKey
-  });
+    projectAccessKey: accessKey,
+  })
 
-  return session;
+  return session
 }
 
 /**
@@ -85,13 +85,13 @@ export async function getSequenceWalletAddress(
   privateKey: string,
   accessKey: string
 ): Promise<string> {
-  const session = await createSession(privateKey, accessKey);
-  return session.account.address;
+  const session = await createSession(privateKey, accessKey)
+  return session.account.address
 }
 
 /**
  * Get network configuration by chain ID
  */
 export function getNetworkConfig(chainId: number) {
-  return networks[chainId as ChainId];
+  return networks[chainId as ChainId]
 }

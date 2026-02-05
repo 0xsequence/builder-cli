@@ -1,49 +1,49 @@
-import {getApiUrl, getValidJwtToken} from "./config.js";
+import { getApiUrl, getValidJwtToken } from './config.js'
 
 export interface AuthState {
-  jwtToken: string;
-  expiresAt: string;
+  jwtToken: string
+  expiresAt: string
   user?: {
-    address: string;
-    email?: string;
-  };
+    address: string
+    email?: string
+  }
 }
 
 export interface GetAuthTokenResponse {
-  ok: boolean;
-  auth: AuthState;
+  ok: boolean
+  auth: AuthState
 }
 
 export interface Project {
-  id: number;
-  name: string;
-  ownerAddress: string;
-  chainIds?: number[];
+  id: number
+  name: string
+  ownerAddress: string
+  chainIds?: number[]
 }
 
 export interface CreateProjectResponse {
-  project: Project;
+  project: Project
 }
 
 export interface ListProjectsResponse {
-  page: {page: number; pageSize: number; more: boolean};
-  projects: Project[];
+  page: { page: number; pageSize: number; more: boolean }
+  projects: Project[]
 }
 
 export interface AccessKey {
-  accessKey: string;
-  projectID: number;
-  displayName: string;
-  active: boolean;
-  default: boolean;
+  accessKey: string
+  projectID: number
+  displayName: string
+  active: boolean
+  default: boolean
 }
 
 export interface GetDefaultAccessKeyResponse {
-  accessKey: AccessKey;
+  accessKey: AccessKey
 }
 
 export interface ListAccessKeysResponse {
-  accessKeys: AccessKey[];
+  accessKeys: AccessKey[]
 }
 
 /**
@@ -52,32 +52,32 @@ export interface ListAccessKeysResponse {
 async function apiRequest<T>(
   endpoint: string,
   body: object,
-  options?: {env?: string; apiUrl?: string; jwtToken?: string}
+  options?: { env?: string; apiUrl?: string; jwtToken?: string }
 ): Promise<T> {
-  const baseUrl = getApiUrl(options);
-  const url = `${baseUrl}/rpc/Builder/${endpoint}`;
+  const baseUrl = getApiUrl(options)
+  const url = `${baseUrl}/rpc/Builder/${endpoint}`
 
   const headers: Record<string, string> = {
-    "Content-Type": "application/json"
-  };
+    'Content-Type': 'application/json',
+  }
 
-  const jwt = options?.jwtToken || getValidJwtToken();
+  const jwt = options?.jwtToken || getValidJwtToken()
   if (jwt) {
-    headers["Authorization"] = `Bearer ${jwt}`;
+    headers['Authorization'] = `Bearer ${jwt}`
   }
 
   const response = await fetch(url, {
-    method: "POST",
+    method: 'POST',
     headers,
-    body: JSON.stringify(body)
-  });
+    body: JSON.stringify(body),
+  })
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`API Error (${response.status}): ${errorText}`);
+    const errorText = await response.text()
+    throw new Error(`API Error (${response.status}): ${errorText}`)
   }
 
-  return response.json() as Promise<T>;
+  return response.json() as Promise<T>
 }
 
 /**
@@ -86,32 +86,32 @@ async function apiRequest<T>(
 async function quotaApiRequest<T>(
   endpoint: string,
   body: object,
-  options?: {env?: string; apiUrl?: string; jwtToken?: string}
+  options?: { env?: string; apiUrl?: string; jwtToken?: string }
 ): Promise<T> {
-  const baseUrl = getApiUrl(options);
-  const url = `${baseUrl}/rpc/QuotaControl/${endpoint}`;
+  const baseUrl = getApiUrl(options)
+  const url = `${baseUrl}/rpc/QuotaControl/${endpoint}`
 
   const headers: Record<string, string> = {
-    "Content-Type": "application/json"
-  };
+    'Content-Type': 'application/json',
+  }
 
-  const jwt = options?.jwtToken || getValidJwtToken();
+  const jwt = options?.jwtToken || getValidJwtToken()
   if (jwt) {
-    headers["Authorization"] = `Bearer ${jwt}`;
+    headers['Authorization'] = `Bearer ${jwt}`
   }
 
   const response = await fetch(url, {
-    method: "POST",
+    method: 'POST',
     headers,
-    body: JSON.stringify(body)
-  });
+    body: JSON.stringify(body),
+  })
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`API Error (${response.status}): ${errorText}`);
+    const errorText = await response.text()
+    throw new Error(`API Error (${response.status}): ${errorText}`)
   }
 
-  return response.json() as Promise<T>;
+  return response.json() as Promise<T>
 }
 
 /**
@@ -120,9 +120,9 @@ async function quotaApiRequest<T>(
 export async function getAuthToken(
   ethauthProof: string,
   email?: string,
-  options?: {env?: string; apiUrl?: string}
+  options?: { env?: string; apiUrl?: string }
 ): Promise<GetAuthTokenResponse> {
-  return apiRequest<GetAuthTokenResponse>("GetAuthToken", {ethauthProof, email}, options);
+  return apiRequest<GetAuthTokenResponse>('GetAuthToken', { ethauthProof, email }, options)
 }
 
 /**
@@ -130,26 +130,26 @@ export async function getAuthToken(
  */
 export async function createProject(
   name: string,
-  options?: {chainIds?: number[]; env?: string; apiUrl?: string}
+  options?: { chainIds?: number[]; env?: string; apiUrl?: string }
 ): Promise<CreateProjectResponse> {
   return apiRequest<CreateProjectResponse>(
-    "CreateProject",
+    'CreateProject',
     {
       name,
-      options: options?.chainIds ? {chainIds: options.chainIds} : undefined
+      options: options?.chainIds ? { chainIds: options.chainIds } : undefined,
     },
     options
-  );
+  )
 }
 
 /**
  * List all projects for the authenticated user
  */
 export async function listProjects(options?: {
-  env?: string;
-  apiUrl?: string;
+  env?: string
+  apiUrl?: string
 }): Promise<ListProjectsResponse> {
-  return apiRequest<ListProjectsResponse>("ListProjects", {}, options);
+  return apiRequest<ListProjectsResponse>('ListProjects', {}, options)
 }
 
 /**
@@ -157,9 +157,9 @@ export async function listProjects(options?: {
  */
 export async function getProject(
   projectId: number,
-  options?: {env?: string; apiUrl?: string}
-): Promise<{project: Project}> {
-  return apiRequest<{project: Project}>("GetProject", {id: projectId}, options);
+  options?: { env?: string; apiUrl?: string }
+): Promise<{ project: Project }> {
+  return apiRequest<{ project: Project }>('GetProject', { id: projectId }, options)
 }
 
 /**
@@ -167,13 +167,13 @@ export async function getProject(
  */
 export async function getDefaultAccessKey(
   projectId: number,
-  options?: {env?: string; apiUrl?: string}
+  options?: { env?: string; apiUrl?: string }
 ): Promise<GetDefaultAccessKeyResponse> {
   return quotaApiRequest<GetDefaultAccessKeyResponse>(
-    "GetDefaultAccessKey",
-    {projectID: projectId},
+    'GetDefaultAccessKey',
+    { projectID: projectId },
     options
-  );
+  )
 }
 
 /**
@@ -181,11 +181,11 @@ export async function getDefaultAccessKey(
  */
 export async function listAccessKeys(
   projectId: number,
-  options?: {env?: string; apiUrl?: string}
+  options?: { env?: string; apiUrl?: string }
 ): Promise<ListAccessKeysResponse> {
   return quotaApiRequest<ListAccessKeysResponse>(
-    "ListAccessKeys",
-    {projectID: projectId},
+    'ListAccessKeys',
+    { projectID: projectId },
     options
-  );
+  )
 }
