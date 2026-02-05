@@ -1,5 +1,6 @@
 import {Command} from "commander";
 import chalk from "chalk";
+import {Session} from "@0xsequence/auth";
 import {
   listProjects,
   createProject,
@@ -7,6 +8,7 @@ import {
   getDefaultAccessKey
 } from "../lib/api.js";
 import {isLoggedIn, EXIT_CODES} from "../lib/config.js";
+import {isValidPrivateKey} from "../lib/wallet.js";
 
 export const projectsCommand = new Command("projects")
   .description("Manage Sequence Builder projects")
@@ -33,6 +35,7 @@ projectsCommand
 projectsCommand
   .command("create [name]")
   .description("Create a new project")
+  .option("-k, --private-key <key>", "Private key to derive Sequence wallet address")
   .option("--json", "Output in JSON format")
   .option("--env <environment>", "Environment to use (prod, dev)", "prod")
   .option("--api-url <url>", "Custom API URL")
@@ -127,9 +130,9 @@ async function listProjectsAction(options: {
 
 async function createProjectAction(
   name: string | undefined,
-  options: {json?: boolean; env?: string; apiUrl?: string; chainIds?: string}
+  options: {json?: boolean; env?: string; apiUrl?: string; chainIds?: string; privateKey?: string}
 ) {
-  const {json, env, apiUrl, chainIds} = options;
+  const {json, env, apiUrl, chainIds, privateKey} = options;
 
   checkAuth(!!json);
 
@@ -172,12 +175,28 @@ async function createProjectAction(
       // Access key fetch failed, but project was created
     }
 
+    // Derive Sequence wallet address if private key is provided
+    let sequenceWalletAddress: string | undefined;
+    if (privateKey && accessKey && isValidPrivateKey(privateKey)) {
+      try {
+        const normalizedKey = privateKey.startsWith("0x") ? privateKey : "0x" + privateKey;
+        const session = await Session.singleSigner({
+          signer: normalizedKey,
+          projectAccessKey: accessKey
+        });
+        sequenceWalletAddress = session.account.address;
+      } catch {
+        // Failed to derive wallet address
+      }
+    }
+
     if (json) {
       console.log(
         JSON.stringify(
           {
             project: response.project,
-            accessKey
+            accessKey,
+            sequenceWalletAddress
           },
           null,
           2
@@ -189,10 +208,15 @@ async function createProjectAction(
     console.log("");
     console.log(chalk.green.bold("✓ Project created successfully!"));
     console.log("");
-    console.log(chalk.white("Project ID:  "), chalk.cyan(response.project.id));
-    console.log(chalk.white("Name:        "), chalk.white(response.project.name));
+    console.log(chalk.white("Project ID:       "), chalk.cyan(response.project.id));
+    console.log(chalk.white("Name:             "), chalk.white(response.project.name));
     if (accessKey) {
-      console.log(chalk.white("Access Key:  "), chalk.yellow(accessKey));
+      console.log(chalk.white("Access Key:       "), chalk.yellow(accessKey));
+    }
+    if (sequenceWalletAddress) {
+      console.log(chalk.white("Sequence Wallet:  "), chalk.cyan(sequenceWalletAddress));
+      console.log("");
+      console.log(chalk.yellow("Send tokens to the Sequence Wallet address for transfers."));
     }
     console.log("");
   } catch (error) {

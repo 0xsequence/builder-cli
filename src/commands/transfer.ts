@@ -2,7 +2,7 @@ import {Command} from "commander";
 import chalk from "chalk";
 import {ethers} from "ethers";
 import {Session} from "@0xsequence/auth";
-import {isLoggedIn, EXIT_CODES} from "../lib/config.js";
+import {EXIT_CODES} from "../lib/config.js";
 import {isValidPrivateKey} from "../lib/wallet.js";
 
 // ERC20 ABI for transfer function
@@ -14,7 +14,7 @@ const ERC20_ABI = [
 ];
 
 export const transferCommand = new Command("transfer")
-  .description("Send an ERC20 token transfer")
+  .description("Send an ERC20 token transfer using Sequence smart wallet")
   .requiredOption("-k, --private-key <key>", "Your wallet private key")
   .requiredOption("-a, --access-key <key>", "Project access key")
   .requiredOption("-t, --token <address>", "ERC20 token contract address")
@@ -108,7 +108,56 @@ export const transferCommand = new Command("transfer")
         projectAccessKey: accessKey
       });
 
-      const signer = session.account.getSigner(chainId);
+      // Get signer with fee options - automatically select first available fee token
+      const signer = session.account.getSigner(chainId, {
+        selectFee: async (_txs: any, options: any[]) => {
+          // If no fee options, transaction might be sponsored
+          if (!options || options.length === 0) {
+            if (!json) {
+              console.log(chalk.gray("Transaction is sponsored (no fee required)"));
+            }
+            return undefined;
+          }
+
+          if (!json) {
+            console.log(chalk.gray("Fee options available:"));
+            for (const opt of options) {
+              console.log(
+                chalk.gray(`  - ${opt.token?.symbol}: ${opt.value} (${opt.token?.contractAddress || "native"})`)
+              );
+            }
+          }
+
+          // Prefer the same token as being transferred (compare addresses case-insensitive)
+          const sameToken = options.find(
+            (o: any) =>
+              o.token?.contractAddress &&
+              o.token.contractAddress.toLowerCase() === token.toLowerCase()
+          );
+          if (sameToken) {
+            if (!json) {
+              console.log(chalk.gray("Selected fee token:"), chalk.cyan(sameToken.token?.symbol));
+            }
+            return sameToken;
+          }
+
+          // Fall back to first non-native option
+          const erc20Option = options.find((o: any) => o.token?.contractAddress);
+          if (erc20Option) {
+            if (!json) {
+              console.log(chalk.gray("Selected fee token:"), chalk.cyan(erc20Option.token?.symbol));
+            }
+            return erc20Option;
+          }
+
+          // Fall back to first option
+          const selected = options[0];
+          if (!json) {
+            console.log(chalk.gray("Selected fee token:"), chalk.cyan(selected?.token?.symbol ?? "native"));
+          }
+          return selected;
+        }
+      });
       walletAddress = session.account.address;
 
       if (!json) {
@@ -141,26 +190,22 @@ export const transferCommand = new Command("transfer")
         console.log(chalk.gray("Sending transaction..."));
       }
 
-      // Prepare the transaction
-      const txData = contract.interface.encodeFunctionData("transfer", [
-        recipient,
-        amountParsed
-      ]);
-
-      const transaction = {
-        to: token,
-        data: txData
-      };
+      // Populate the transaction
+      const txn = await contract.transfer.populateTransaction(recipient, amountParsed);
 
       // Send the transaction
-      const txResponse = await signer.sendTransaction(transaction);
+      if (!json) {
+        console.log(chalk.gray("Submitting to relayer..."));
+      }
+      const txResponse = await signer.sendTransaction(txn);
 
       if (!json) {
+        console.log(chalk.gray("Transaction submitted:"), chalk.cyan(txResponse.hash));
         console.log(chalk.gray("Waiting for confirmation..."));
       }
 
-      // Wait for the transaction to be mined
-      const receipt = await txResponse.wait();
+      // Wait for the transaction to be mined (with timeout)
+      const receipt = await txResponse.wait(undefined, 30000);
 
       if (!receipt) {
         if (json) {

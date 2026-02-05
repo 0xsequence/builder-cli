@@ -8,6 +8,7 @@ import {loginCommand} from "./commands/login.js";
 import {projectsCommand} from "./commands/projects.js";
 import {apikeysCommand} from "./commands/apikeys.js";
 import {transferCommand} from "./commands/transfer.js";
+import {walletInfoCommand} from "./commands/wallet-info.js";
 
 const program = new Command();
 
@@ -18,6 +19,7 @@ program
 
 // Register commands
 program.addCommand(createWalletCommand);
+program.addCommand(walletInfoCommand);
 program.addCommand(loginCommand);
 program.addCommand(projectsCommand);
 program.addCommand(apikeysCommand);
