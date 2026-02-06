@@ -327,11 +327,11 @@ export const transferCommand = new Command('transfer')
           if (error.isRateLimited) {
             console.error(chalk.red('✖ Rate limited by the API'))
             if (error.retryAfterSeconds !== null) {
-              console.error(
-                chalk.yellow(`  Retry after: ${error.retryAfterSeconds}s`)
-              )
+              console.error(chalk.yellow(`  Retry after: ${error.retryAfterSeconds}s`))
             }
-            console.error(chalk.gray('  You have made too many requests. Please wait before trying again.'))
+            console.error(
+              chalk.gray('  You have made too many requests. Please wait before trying again.')
+            )
           } else {
             console.error(chalk.red('✖ Permission denied (403)'))
             console.error(chalk.gray('  This can happen when:'))
@@ -339,9 +339,7 @@ export const transferCommand = new Command('transfer')
             console.error(chalk.gray('    - You have exceeded the signing rate limit'))
             console.error(chalk.gray('    - The access key is invalid or revoked'))
             if (error.retryAfterSeconds !== null) {
-              console.error(
-                chalk.yellow(`  Retry after: ${error.retryAfterSeconds}s`)
-              )
+              console.error(chalk.yellow(`  Retry after: ${error.retryAfterSeconds}s`))
             }
           }
           if (error.errorBody) {
@@ -375,7 +373,11 @@ export const transferCommand = new Command('transfer')
       }
 
       // Check for 403/rate-limit in generic error messages (e.g. from Sequence SDK)
-      if (errorMessage.includes('403') || errorMessage.toLowerCase().includes('permissiondenied') || errorMessage.toLowerCase().includes('rate limit')) {
+      if (
+        errorMessage.includes('403') ||
+        errorMessage.toLowerCase().includes('permissiondenied') ||
+        errorMessage.toLowerCase().includes('rate limit')
+      ) {
         if (json) {
           console.log(
             JSON.stringify({
@@ -398,7 +400,13 @@ export const transferCommand = new Command('transfer')
       }
 
       if (json) {
-        console.log(JSON.stringify({ error: errorMessage, code: EXIT_CODES.GENERAL_ERROR, timing: { failedStep: currentStep, failedStepMs, totalElapsedMs } }))
+        console.log(
+          JSON.stringify({
+            error: errorMessage,
+            code: EXIT_CODES.GENERAL_ERROR,
+            timing: { failedStep: currentStep, failedStepMs, totalElapsedMs },
+          })
+        )
       } else {
         console.error(chalk.red('✖ Transfer failed:'), errorMessage)
       }

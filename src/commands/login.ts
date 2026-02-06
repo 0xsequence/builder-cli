@@ -138,7 +138,9 @@ export const loginCommand = new Command('login')
               console.error(chalk.yellow(`  Retry after: ${error.retryAfterSeconds}s`))
             }
             console.error(
-              chalk.gray('  You have made too many login attempts. Please wait before trying again.')
+              chalk.gray(
+                '  You have made too many login attempts. Please wait before trying again.'
+              )
             )
           } else {
             console.error(chalk.red('✖ Permission denied (403)'))
@@ -158,7 +160,11 @@ export const loginCommand = new Command('login')
       }
 
       // Catch 403/rate-limit in generic error strings (e.g. from SDK internals)
-      if (errorMessage.includes('403') || errorMessage.toLowerCase().includes('permissiondenied') || errorMessage.toLowerCase().includes('rate limit')) {
+      if (
+        errorMessage.includes('403') ||
+        errorMessage.toLowerCase().includes('permissiondenied') ||
+        errorMessage.toLowerCase().includes('rate limit')
+      ) {
         if (options.json) {
           console.log(
             JSON.stringify({

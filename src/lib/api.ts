@@ -58,13 +58,14 @@ export class ApiError extends Error {
   public readonly isUnauthorized: boolean
 
   constructor(statusCode: number, errorBody: string, retryAfter: number | null) {
-    const label = statusCode === 429
-      ? 'Rate Limited'
-      : statusCode === 403
-        ? 'Permission Denied'
-        : statusCode === 401
-          ? 'Unauthorized'
-          : `API Error`
+    const label =
+      statusCode === 429
+        ? 'Rate Limited'
+        : statusCode === 403
+          ? 'Permission Denied'
+          : statusCode === 401
+            ? 'Unauthorized'
+            : `API Error`
 
     let detail = `${label} (${statusCode})`
     if (errorBody) {

@@ -17,7 +17,10 @@ import { isValidPrivateKey } from '../lib/wallet.js'
  * Returns true if the error was handled; false otherwise.
  */
 function handleApiErrorOutput(error: unknown, json: boolean): boolean {
-  if (isApiError(error) && (error.isRateLimited || error.isPermissionDenied || error.isUnauthorized)) {
+  if (
+    isApiError(error) &&
+    (error.isRateLimited || error.isPermissionDenied || error.isUnauthorized)
+  ) {
     if (json) {
       console.log(
         JSON.stringify({
@@ -38,7 +41,9 @@ function handleApiErrorOutput(error: unknown, json: boolean): boolean {
         if (error.retryAfterSeconds !== null) {
           console.error(chalk.yellow(`  Retry after: ${error.retryAfterSeconds}s`))
         }
-        console.error(chalk.gray('  You have made too many requests. Please wait before trying again.'))
+        console.error(
+          chalk.gray('  You have made too many requests. Please wait before trying again.')
+        )
       } else if (error.isPermissionDenied) {
         console.error(chalk.red('✖ Permission denied (403)'))
         console.error(chalk.gray('  This can happen when:'))
@@ -50,7 +55,9 @@ function handleApiErrorOutput(error: unknown, json: boolean): boolean {
         }
       } else {
         console.error(chalk.red('✖ Unauthorized (401)'))
-        console.error(chalk.gray('  Your JWT token may have expired. Re-run: sequence-builder login'))
+        console.error(
+          chalk.gray('  Your JWT token may have expired. Re-run: sequence-builder login')
+        )
       }
       if (error.errorBody) {
         console.error(chalk.gray(`  Server response: ${error.errorBody}`))
