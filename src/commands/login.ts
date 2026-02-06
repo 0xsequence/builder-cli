@@ -2,19 +2,27 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import { generateEthAuthProof } from '../lib/ethauth.js'
 import { getAuthToken } from '../lib/api.js'
-import { updateConfig, EXIT_CODES, isLoggedIn, getValidJwtToken } from '../lib/config.js'
+import {
+  updateConfig,
+  EXIT_CODES,
+  isLoggedIn,
+  getValidJwtToken,
+  getPrivateKey,
+  storeEncryptedKey,
+} from '../lib/config.js'
 import { isValidPrivateKey, getAddressFromPrivateKey } from '../lib/wallet.js'
 
 export const loginCommand = new Command('login')
   .description('Authenticate with Sequence Builder using your private key')
-  .requiredOption('-k, --private-key <key>', 'Your wallet private key')
+  .option('-k, --private-key <key>', 'Your wallet private key (or use stored encrypted key)')
   .option('-e, --email <email>', 'Email address to associate with your account')
   .option('--json', 'Output in JSON format')
   .option('--env <environment>', 'Environment to use (prod, dev)', 'prod')
   .option('--api-url <url>', 'Custom API URL')
   .action(async (options) => {
     try {
-      const { privateKey, email, json, env, apiUrl } = options
+      const { email, json, env, apiUrl } = options
+      const privateKey = getPrivateKey(options)
 
       // Validate private key format
       if (!isValidPrivateKey(privateKey)) {
@@ -73,6 +81,9 @@ export const loginCommand = new Command('login')
         apiUrl: apiUrl,
       })
 
+      // Auto-encrypt and store private key if SEQUENCE_PASSPHRASE is set
+      const stored = storeEncryptedKey(privateKey)
+
       if (json) {
         console.log(
           JSON.stringify(
@@ -93,6 +104,12 @@ export const loginCommand = new Command('login')
       console.log('')
       console.log(chalk.white('Address:   '), chalk.cyan(address))
       console.log(chalk.white('Expires:   '), chalk.gray(response.auth.expiresAt))
+      if (stored) {
+        console.log(
+          chalk.green('Key:       '),
+          chalk.green('Encrypted and stored (no need to pass -k again)')
+        )
+      }
       console.log('')
       console.log(chalk.gray('You can now use commands like:'))
       console.log(chalk.gray('  sequence-builder projects'))
