@@ -2,6 +2,7 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import { listAccessKeys, getDefaultAccessKey } from '../lib/api.js'
 import { isLoggedIn, EXIT_CODES } from '../lib/config.js'
+import { extractErrorMessage } from '../lib/errors.js'
 
 export const apikeysCommand = new Command('apikeys')
   .description('Manage API keys for a project')
@@ -103,7 +104,7 @@ async function listApiKeysAction(
 
     console.log('')
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorMessage = extractErrorMessage(error)
     if (json) {
       console.log(JSON.stringify({ error: errorMessage, code: EXIT_CODES.API_ERROR }))
     } else {
@@ -172,7 +173,7 @@ async function getDefaultKeyAction(
     )
     console.log('')
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorMessage = extractErrorMessage(error)
     if (json) {
       console.log(JSON.stringify({ error: errorMessage, code: EXIT_CODES.API_ERROR }))
     } else {

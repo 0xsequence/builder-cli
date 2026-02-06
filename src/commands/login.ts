@@ -1,7 +1,8 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import { generateEthAuthProof } from '../lib/ethauth.js'
-import { getAuthToken } from '../lib/api.js'
+import { getAuthToken, isApiError } from '../lib/api.js'
+import { extractErrorMessage } from '../lib/errors.js'
 import {
   updateConfig,
   EXIT_CODES,
@@ -116,7 +117,71 @@ export const loginCommand = new Command('login')
       console.log(chalk.gray('  sequence-builder projects create "My Project"'))
       console.log('')
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorMessage = extractErrorMessage(error)
+
+      // Structured API error with rate-limit / permission info
+      if (isApiError(error) && (error.isRateLimited || error.isPermissionDenied)) {
+        if (options.json) {
+          console.log(
+            JSON.stringify({
+              error: error.isRateLimited ? 'Rate limited' : 'Permission denied',
+              statusCode: error.statusCode,
+              retryAfterSeconds: error.retryAfterSeconds,
+              detail: error.errorBody,
+              code: EXIT_CODES.API_ERROR,
+            })
+          )
+        } else {
+          if (error.isRateLimited) {
+            console.error(chalk.red('✖ Rate limited by the API'))
+            if (error.retryAfterSeconds !== null) {
+              console.error(chalk.yellow(`  Retry after: ${error.retryAfterSeconds}s`))
+            }
+            console.error(
+              chalk.gray(
+                '  You have made too many login attempts. Please wait before trying again.'
+              )
+            )
+          } else {
+            console.error(chalk.red('✖ Permission denied (403)'))
+            console.error(chalk.gray('  This can happen when:'))
+            console.error(chalk.gray('    - Too many signing/login attempts in a short period'))
+            console.error(chalk.gray('    - The ETHAuth proof is malformed or expired'))
+            console.error(chalk.gray('    - Your wallet address is not authorized'))
+          }
+          if (error.retryAfterSeconds !== null && !error.isRateLimited) {
+            console.error(chalk.yellow(`  Retry after: ${error.retryAfterSeconds}s`))
+          }
+          if (error.errorBody) {
+            console.error(chalk.gray(`  Server response: ${error.errorBody}`))
+          }
+        }
+        process.exit(EXIT_CODES.API_ERROR)
+      }
+
+      // Catch 403/rate-limit in generic error strings (e.g. from SDK internals)
+      if (
+        errorMessage.includes('403') ||
+        errorMessage.toLowerCase().includes('permissiondenied') ||
+        errorMessage.toLowerCase().includes('rate limit')
+      ) {
+        if (options.json) {
+          console.log(
+            JSON.stringify({
+              error: 'Permission denied or rate limited',
+              detail: errorMessage,
+              code: EXIT_CODES.API_ERROR,
+            })
+          )
+        } else {
+          console.error(chalk.red('✖ Permission denied or rate limited'))
+          console.error(chalk.gray('  This can happen when:'))
+          console.error(chalk.gray('    - Too many signing/login attempts in a short period'))
+          console.error(chalk.gray('    - The ETHAuth proof is malformed or expired'))
+          console.error(chalk.gray(`  Detail: ${errorMessage}`))
+        }
+        process.exit(EXIT_CODES.API_ERROR)
+      }
 
       if (options.json) {
         console.log(JSON.stringify({ error: errorMessage, code: EXIT_CODES.API_ERROR }))

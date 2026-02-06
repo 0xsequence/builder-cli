@@ -4,6 +4,70 @@ import { ethers } from 'ethers'
 import { Session } from '@0xsequence/auth'
 import { EXIT_CODES, getPrivateKey } from '../lib/config.js'
 import { isValidPrivateKey } from '../lib/wallet.js'
+import { isApiError } from '../lib/api.js'
+import { extractErrorMessage } from '../lib/errors.js'
+
+/**
+ * Format a duration in milliseconds to a human-readable string.
+ * e.g. 350 -> "350ms", 1200 -> "1.2s", 65000 -> "1m 5s"
+ */
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+  const mins = Math.floor(ms / 60000)
+  const secs = Math.round((ms % 60000) / 1000)
+  return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`
+}
+
+/** Patterns that indicate a rate-limit or permission error in SDK/RPC messages */
+const RATE_LIMIT_PATTERNS = [
+  '429',
+  'too many requests',
+  'rate limit',
+  'retry limit',
+  'rate is too high',
+  'slow down',
+]
+const PERMISSION_DENIED_PATTERNS = ['403', 'permissiondenied', 'permission denied', 'forbidden']
+
+function isRateLimitMessage(msg: string): boolean {
+  const lower = msg.toLowerCase()
+  return RATE_LIMIT_PATTERNS.some((p) => lower.includes(p))
+}
+
+function isPermissionDeniedMessage(msg: string): boolean {
+  const lower = msg.toLowerCase()
+  return PERMISSION_DENIED_PATTERNS.some((p) => lower.includes(p))
+}
+
+/**
+ * Try to extract a clean, human-readable message from ethers/SDK nested errors.
+ * These often embed JSON in an `info.responseBody` field like:
+ *   `{"jsonrpc":"2.0","id":1,"error":{"code":1201,"message":"..."}}`
+ */
+function parseCleanErrorMessage(raw: string): string {
+  // Try to find a JSON "message" inside responseBody
+  const bodyMatch = raw.match(/"responseBody"\s*:\s*"((?:\\"|[^"])*)"/)
+  if (bodyMatch) {
+    try {
+      const body = JSON.parse(`"${bodyMatch[1]}"`) // unescape the string
+      const parsed = JSON.parse(body)
+      if (parsed?.error?.message) {
+        return parsed.error.message
+      }
+    } catch {
+      // fall through
+    }
+  }
+
+  // Try to find responseStatus
+  const statusMatch = raw.match(/"responseStatus"\s*:\s*"([^"]*)"/)
+  if (statusMatch) {
+    return statusMatch[1]
+  }
+
+  return raw
+}
 
 // ERC20 ABI for transfer function
 const ERC20_ABI = [
@@ -25,8 +89,11 @@ export const transferCommand = new Command('transfer')
   .action(async (options) => {
     const { accessKey, token, recipient, amount, chainId: chainIdStr, json } = options
 
-    // Track wallet address for error reporting
+    // Track wallet address and timing for error reporting
     let walletAddress: string | undefined
+    const overallStart = performance.now()
+    let currentStep = 'initializing'
+    let stepStart = overallStart
 
     try {
       const privateKey = getPrivateKey(options)
@@ -93,10 +160,18 @@ export const transferCommand = new Command('transfer')
       }
 
       // Create Sequence session
+      currentStep = 'creating session'
+      stepStart = performance.now()
+      const sessionStart = stepStart
       const session = await Session.singleSigner({
         signer: normalizedPrivateKey,
         projectAccessKey: accessKey,
       })
+      const sessionMs = Math.round(performance.now() - sessionStart)
+
+      if (!json) {
+        console.log(chalk.gray('Session created'), chalk.gray(`(${formatDuration(sessionMs)})`))
+      }
 
       // Get signer with fee options - automatically select first available fee token
       const signer = session.account.getSigner(chainId, {
@@ -186,21 +261,35 @@ export const transferCommand = new Command('transfer')
       }
 
       // Populate the transaction
+      currentStep = 'preparing transaction'
+      stepStart = performance.now()
       const txn = await contract.transfer.populateTransaction(recipient, amountParsed)
 
       // Send the transaction
       if (!json) {
         console.log(chalk.gray('Submitting to relayer...'))
       }
+      currentStep = 'submitting to relayer'
+      stepStart = performance.now()
+      const sendStart = stepStart
       const txResponse = await signer.sendTransaction(txn)
+      const sendMs = Math.round(performance.now() - sendStart)
 
       if (!json) {
-        console.log(chalk.gray('Transaction submitted:'), chalk.cyan(txResponse.hash))
+        console.log(
+          chalk.gray('Transaction submitted:'),
+          chalk.cyan(txResponse.hash),
+          chalk.gray(`(${formatDuration(sendMs)})`)
+        )
         console.log(chalk.gray('Waiting for confirmation...'))
       }
 
       // Wait for the transaction to be mined (with timeout)
+      currentStep = 'waiting for confirmation'
+      stepStart = performance.now()
+      const confirmStart = stepStart
       const receipt = await txResponse.wait(undefined, 30000)
+      const confirmMs = Math.round(performance.now() - confirmStart)
 
       if (!receipt) {
         if (json) {
@@ -212,6 +301,8 @@ export const transferCommand = new Command('transfer')
         }
         process.exit(EXIT_CODES.GENERAL_ERROR)
       }
+
+      const totalMs = sessionMs + sendMs + confirmMs
 
       if (json) {
         console.log(
@@ -225,6 +316,12 @@ export const transferCommand = new Command('transfer')
               amount,
               symbol,
               chainId,
+              timing: {
+                sessionMs,
+                sendMs,
+                confirmMs,
+                totalMs,
+              },
             },
             null,
             2
@@ -233,6 +330,7 @@ export const transferCommand = new Command('transfer')
         return
       }
 
+      console.log(chalk.gray('Confirmed'), chalk.gray(`(${formatDuration(confirmMs)})`))
       console.log('')
       console.log(chalk.green.bold('✓ Transfer successful!'))
       console.log('')
@@ -241,10 +339,102 @@ export const transferCommand = new Command('transfer')
       console.log(chalk.white('To:              '), chalk.gray(recipient))
       console.log(chalk.white('Amount:          '), chalk.white(`${amount} ${symbol}`))
       console.log('')
+      console.log(
+        chalk.gray(
+          `Timing: session ${formatDuration(sessionMs)}, send ${formatDuration(sendMs)}, confirm ${formatDuration(confirmMs)}, total ${formatDuration(totalMs)}`
+        )
+      )
+      console.log('')
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorMessage = extractErrorMessage(error)
+      const failedStepMs = Math.round(performance.now() - stepStart)
+      const totalElapsedMs = Math.round(performance.now() - overallStart)
 
-      // Check for common errors
+      // Always show timing context for the failed step
+      if (!json) {
+        console.error(
+          chalk.gray(
+            `Failed during "${currentStep}" after ${formatDuration(failedStepMs)} (total elapsed: ${formatDuration(totalElapsedMs)})`
+          )
+        )
+      }
+
+      // Check for rate-limit / permission errors (structured ApiError from our api.ts)
+      if (isApiError(error) && (error.isRateLimited || error.isPermissionDenied)) {
+        if (json) {
+          console.log(
+            JSON.stringify({
+              error: error.isRateLimited ? 'Rate limited' : 'Permission denied',
+              statusCode: error.statusCode,
+              retryAfterSeconds: error.retryAfterSeconds,
+              detail: error.errorBody,
+              walletAddress,
+              code: EXIT_CODES.API_ERROR,
+              timing: { failedStep: currentStep, failedStepMs, totalElapsedMs },
+            })
+          )
+        } else {
+          if (error.isRateLimited) {
+            console.error(chalk.red('✖ Rate limited by the API'))
+            if (error.retryAfterSeconds !== null) {
+              console.error(chalk.yellow(`  Retry after: ${error.retryAfterSeconds}s`))
+            }
+            console.error(
+              chalk.gray('  You have made too many requests. Please wait before trying again.')
+            )
+          } else {
+            console.error(chalk.red('✖ Permission denied (403)'))
+            console.error(chalk.gray('  This can happen when:'))
+            console.error(chalk.gray('    - Your session or ETHAuth proof has expired'))
+            console.error(chalk.gray('    - You have exceeded the signing rate limit'))
+            console.error(chalk.gray('    - The access key is invalid or revoked'))
+            if (error.retryAfterSeconds !== null) {
+              console.error(chalk.yellow(`  Retry after: ${error.retryAfterSeconds}s`))
+            }
+          }
+          if (error.errorBody) {
+            console.error(chalk.gray(`  Server response: ${error.errorBody}`))
+          }
+        }
+        process.exit(EXIT_CODES.API_ERROR)
+      }
+
+      // Check for rate-limit / permission in generic error messages (e.g. from Sequence SDK / ethers)
+      const detectedRateLimit = isRateLimitMessage(errorMessage)
+      const detectedPermission = !detectedRateLimit && isPermissionDeniedMessage(errorMessage)
+
+      if (detectedRateLimit || detectedPermission) {
+        const cleanMsg = parseCleanErrorMessage(errorMessage)
+        if (json) {
+          console.log(
+            JSON.stringify({
+              error: detectedRateLimit ? 'Rate limited' : 'Permission denied',
+              detail: cleanMsg,
+              walletAddress,
+              code: EXIT_CODES.API_ERROR,
+              timing: { failedStep: currentStep, failedStepMs, totalElapsedMs },
+            })
+          )
+        } else {
+          if (detectedRateLimit) {
+            console.error(chalk.red('✖ Rate limited — too many requests'))
+            console.error(chalk.yellow(`  ${cleanMsg}`))
+            console.error(chalk.gray('  Wait a minute or two before retrying.'))
+            console.error(
+              chalk.gray('  To increase limits, upgrade your project at https://sequence.build')
+            )
+          } else {
+            console.error(chalk.red('✖ Permission denied'))
+            console.error(chalk.gray('  This can happen when:'))
+            console.error(chalk.gray('    - Your session or ETHAuth proof has expired'))
+            console.error(chalk.gray('    - The access key is invalid or revoked'))
+            console.error(chalk.gray(`  Detail: ${cleanMsg}`))
+          }
+        }
+        process.exit(EXIT_CODES.API_ERROR)
+      }
+
+      // Check for insufficient balance
       if (errorMessage.includes('insufficient') || errorMessage.includes('balance')) {
         if (json) {
           console.log(
@@ -252,6 +442,7 @@ export const transferCommand = new Command('transfer')
               error: 'Insufficient balance',
               walletAddress,
               code: EXIT_CODES.INSUFFICIENT_FUNDS,
+              timing: { failedStep: currentStep, failedStepMs, totalElapsedMs },
             })
           )
         } else {
@@ -267,7 +458,13 @@ export const transferCommand = new Command('transfer')
       }
 
       if (json) {
-        console.log(JSON.stringify({ error: errorMessage, code: EXIT_CODES.GENERAL_ERROR }))
+        console.log(
+          JSON.stringify({
+            error: errorMessage,
+            code: EXIT_CODES.GENERAL_ERROR,
+            timing: { failedStep: currentStep, failedStepMs, totalElapsedMs },
+          })
+        )
       } else {
         console.error(chalk.red('✖ Transfer failed:'), errorMessage)
       }

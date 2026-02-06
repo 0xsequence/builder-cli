@@ -1,9 +1,72 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import { Session } from '@0xsequence/auth'
-import { listProjects, createProject, getProject, getDefaultAccessKey } from '../lib/api.js'
+import {
+  listProjects,
+  createProject,
+  getProject,
+  getDefaultAccessKey,
+  isApiError,
+} from '../lib/api.js'
+import { extractErrorMessage } from '../lib/errors.js'
 import { isLoggedIn, EXIT_CODES, loadConfig } from '../lib/config.js'
 import { isValidPrivateKey } from '../lib/wallet.js'
+
+/**
+ * Handle API errors with rate-limit / permission awareness.
+ * Returns true if the error was handled; false otherwise.
+ */
+function handleApiErrorOutput(error: unknown, json: boolean): boolean {
+  if (
+    isApiError(error) &&
+    (error.isRateLimited || error.isPermissionDenied || error.isUnauthorized)
+  ) {
+    if (json) {
+      console.log(
+        JSON.stringify({
+          error: error.isRateLimited
+            ? 'Rate limited'
+            : error.isPermissionDenied
+              ? 'Permission denied'
+              : 'Unauthorized',
+          statusCode: error.statusCode,
+          retryAfterSeconds: error.retryAfterSeconds,
+          detail: error.errorBody,
+          code: EXIT_CODES.API_ERROR,
+        })
+      )
+    } else {
+      if (error.isRateLimited) {
+        console.error(chalk.red('✖ Rate limited by the API'))
+        if (error.retryAfterSeconds !== null) {
+          console.error(chalk.yellow(`  Retry after: ${error.retryAfterSeconds}s`))
+        }
+        console.error(
+          chalk.gray('  You have made too many requests. Please wait before trying again.')
+        )
+      } else if (error.isPermissionDenied) {
+        console.error(chalk.red('✖ Permission denied (403)'))
+        console.error(chalk.gray('  This can happen when:'))
+        console.error(chalk.gray('    - Your session token has expired (re-run login)'))
+        console.error(chalk.gray('    - Too many requests in a short period'))
+        console.error(chalk.gray('    - The access key is invalid or revoked'))
+        if (error.retryAfterSeconds !== null) {
+          console.error(chalk.yellow(`  Retry after: ${error.retryAfterSeconds}s`))
+        }
+      } else {
+        console.error(chalk.red('✖ Unauthorized (401)'))
+        console.error(
+          chalk.gray('  Your JWT token may have expired. Re-run: sequence-builder login')
+        )
+      }
+      if (error.errorBody) {
+        console.error(chalk.gray(`  Server response: ${error.errorBody}`))
+      }
+    }
+    return true
+  }
+  return false
+}
 
 export const projectsCommand = new Command('projects')
   .description('Manage Sequence Builder projects')
@@ -103,7 +166,10 @@ async function listProjectsAction(options: { json?: boolean; env?: string; apiUr
     console.log(chalk.gray('Run `sequence-builder apikeys <project-id>` to view API keys'))
     console.log('')
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
+    if (handleApiErrorOutput(error, !!json)) {
+      process.exit(EXIT_CODES.API_ERROR)
+    }
+    const errorMessage = extractErrorMessage(error)
     if (json) {
       console.log(JSON.stringify({ error: errorMessage, code: EXIT_CODES.API_ERROR }))
     } else {
@@ -233,7 +299,10 @@ async function createProjectAction(
     }
     console.log('')
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
+    if (handleApiErrorOutput(error, !!json)) {
+      process.exit(EXIT_CODES.API_ERROR)
+    }
+    const errorMessage = extractErrorMessage(error)
     if (json) {
       console.log(JSON.stringify({ error: errorMessage, code: EXIT_CODES.API_ERROR }))
     } else {
@@ -296,7 +365,10 @@ async function getProjectAction(
     }
     console.log('')
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
+    if (handleApiErrorOutput(error, !!json)) {
+      process.exit(EXIT_CODES.API_ERROR)
+    }
+    const errorMessage = extractErrorMessage(error)
     if (json) {
       console.log(JSON.stringify({ error: errorMessage, code: EXIT_CODES.API_ERROR }))
     } else {

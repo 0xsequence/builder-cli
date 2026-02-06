@@ -4,6 +4,7 @@ import { SequenceIndexer } from '@0xsequence/indexer'
 import { networks, ChainId } from '@0xsequence/network'
 import { EXIT_CODES } from '../lib/config.js'
 import { ethers } from 'ethers'
+import { extractErrorMessage } from '../lib/errors.js'
 
 // Get indexer URL for a chain
 function getIndexerUrl(chainId: number): string {
@@ -77,7 +78,7 @@ indexerCommand
       }
       console.log('')
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorMessage = extractErrorMessage(error)
       if (json) {
         console.log(JSON.stringify({ error: errorMessage, code: EXIT_CODES.GENERAL_ERROR }))
       } else {
@@ -147,7 +148,7 @@ indexerCommand
       console.log(chalk.cyan(`  ${symbol}:`), chalk.white(balance))
       console.log('')
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorMessage = extractErrorMessage(error)
       if (json) {
         console.log(JSON.stringify({ error: errorMessage, code: EXIT_CODES.GENERAL_ERROR }))
       } else {
@@ -237,7 +238,7 @@ indexerCommand
         console.log('')
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorMessage = extractErrorMessage(error)
       if (json) {
         console.log(JSON.stringify({ error: errorMessage, code: EXIT_CODES.GENERAL_ERROR }))
       } else {
@@ -327,7 +328,7 @@ indexerCommand
       }
       console.log('')
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorMessage = extractErrorMessage(error)
       if (json) {
         console.log(JSON.stringify({ error: errorMessage, code: EXIT_CODES.GENERAL_ERROR }))
       } else {
