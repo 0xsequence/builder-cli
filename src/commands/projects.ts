@@ -2,7 +2,7 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import { Session } from '@0xsequence/auth'
 import { listProjects, createProject, getProject, getDefaultAccessKey } from '../lib/api.js'
-import { isLoggedIn, EXIT_CODES } from '../lib/config.js'
+import { isLoggedIn, EXIT_CODES, loadConfig } from '../lib/config.js'
 import { isValidPrivateKey } from '../lib/wallet.js'
 
 export const projectsCommand = new Command('projects')
@@ -160,11 +160,39 @@ async function createProjectAction(
       // Access key fetch failed, but project was created
     }
 
-    // Derive Sequence wallet address if private key is provided
-    let sequenceWalletAddress: string | undefined
-    if (privateKey && accessKey && isValidPrivateKey(privateKey)) {
+    // Derive Sequence wallet address if private key is available (explicit or stored)
+    let resolvedPrivateKey = privateKey
+    if (!resolvedPrivateKey) {
+      // Try to get stored key without exiting -- it's optional for project creation
       try {
-        const normalizedKey = privateKey.startsWith('0x') ? privateKey : '0x' + privateKey
+        const config = loadConfig()
+        const passphrase = process.env.SEQUENCE_PASSPHRASE
+        if (
+          config.encryptedPrivateKey &&
+          config.encryptionSalt &&
+          config.encryptionIv &&
+          passphrase
+        ) {
+          const { decryptPrivateKey } = await import('../lib/crypto.js')
+          resolvedPrivateKey = decryptPrivateKey(
+            {
+              encrypted: config.encryptedPrivateKey,
+              salt: config.encryptionSalt,
+              iv: config.encryptionIv,
+            },
+            passphrase
+          )
+        }
+      } catch {
+        // No stored key available, that's fine for project creation
+      }
+    }
+    let sequenceWalletAddress: string | undefined
+    if (resolvedPrivateKey && accessKey && isValidPrivateKey(resolvedPrivateKey)) {
+      try {
+        const normalizedKey = resolvedPrivateKey.startsWith('0x')
+          ? resolvedPrivateKey
+          : '0x' + resolvedPrivateKey
         const session = await Session.singleSigner({
           signer: normalizedKey,
           projectAccessKey: accessKey,

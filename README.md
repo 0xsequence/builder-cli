@@ -17,7 +17,13 @@ npm install -g @0xsequence/builder-cli
 sequence-builder --help
 ```
 
-## Quick Start for Agents
+## Private Key Encryption
+
+Set `SEQUENCE_PASSPHRASE` in your environment to auto-encrypt and store the private key. No need to pass `-k` after wallet creation.
+
+```bash
+export SEQUENCE_PASSPHRASE="your-strong-secret"
+```
 
 ```bash
 # 1. Generate a wallet
@@ -34,7 +40,7 @@ npx @0xsequence/builder-cli projects create "My Project"
 # 5. Get your Sequence wallet address (where to send tokens)
 npx @0xsequence/builder-cli wallet-info -k <private-key> -a <access-key>
 
-# 6. Fund the Sequence wallet with tokens
+# 6. Fund the Sequence wallet via the Trails link from step 5
 
 # 7. Send an ERC20 transfer (gas paid with same token!)
 npx @0xsequence/builder-cli transfer \
@@ -117,6 +123,11 @@ Sequence Wallet:       0xA715064b5601Aebf197aC84A469b72Bb7Dc6A646
 Important:
   Send tokens to the Sequence Wallet address for use with the transfer command.
   The Sequence Wallet can pay gas fees with ERC20 tokens (no ETH needed).
+
+Fund your wallet:
+  Click the link below to fund your Sequence Wallet via Trails:
+
+https://demo.trails.build/?mode=swap&toAddress=0xA715064b5601Aebf197aC84A469b72Bb7Dc6A646&toChainId=137&toToken=0x3c499c542cef5e3811e1192ce70d8cc03d5c3359&apiKey=AQAAAAAAAKhGHJc3N5V2AWqfJ1v9xZ2u0nA&theme=light
 ```
 
 ## Login
@@ -288,8 +299,18 @@ Configuration is stored in `~/.sequence-builder/config.json`:
 
 - JWT token for authentication
 - Environment settings
+- Encrypted private key (if `SEQUENCE_PASSPHRASE` is set)
 
-**Note**: Private keys are NOT stored. You must provide them with each command that requires signing.
+### Encrypted Key Storage
+
+When `SEQUENCE_PASSPHRASE` is set as an environment variable, the CLI will:
+
+1. **On `create-wallet` / `login`**: Encrypt the private key with AES-256-GCM and store it in config
+2. **On all other commands**: Automatically decrypt and use the stored key (no `-k` flag needed)
+
+The private key is encrypted using a key derived from `SEQUENCE_PASSPHRASE` via scrypt. Only the encrypted ciphertext, salt, and IV are stored -- never the raw key.
+
+To disable encrypted storage, simply unset the env var. You can always override with an explicit `-k` flag.
 
 ## Environment Support
 

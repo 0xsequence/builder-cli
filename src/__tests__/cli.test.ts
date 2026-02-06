@@ -44,7 +44,8 @@ describe('CLI commands', () => {
 
     it('should output JSON format with --json flag', () => {
       const result = runCli('create-wallet --json')
-      const output = result.stdout.trim().split('\n').slice(-4).join('\n') // Get JSON part
+      const raw = result.stdout.trim()
+      const output = raw.substring(raw.indexOf('{'), raw.lastIndexOf('}') + 1) // Get JSON part
       expect(() => JSON.parse(output)).not.toThrow()
       const json = JSON.parse(output)
       expect(json).toHaveProperty('privateKey')

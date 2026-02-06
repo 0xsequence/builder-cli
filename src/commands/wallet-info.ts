@@ -1,18 +1,20 @@
 import { Command } from 'commander'
 import chalk from 'chalk'
 import { Session } from '@0xsequence/auth'
-import { EXIT_CODES } from '../lib/config.js'
+import { EXIT_CODES, getPrivateKey } from '../lib/config.js'
 import { isValidPrivateKey, getAddressFromPrivateKey } from '../lib/wallet.js'
 
 export const walletInfoCommand = new Command('wallet-info')
   .description('Show wallet addresses (EOA and Sequence smart wallet)')
-  .requiredOption('-k, --private-key <key>', 'Your wallet private key')
+  .option('-k, --private-key <key>', 'Your wallet private key (or use stored encrypted key)')
   .requiredOption('-a, --access-key <key>', 'Project access key')
   .option('--json', 'Output in JSON format')
   .action(async (options) => {
-    const { privateKey, accessKey, json } = options
+    const { accessKey, json } = options
 
     try {
+      const privateKey = getPrivateKey(options)
+
       // Validate private key format
       if (!isValidPrivateKey(privateKey)) {
         if (json) {
@@ -46,12 +48,15 @@ export const walletInfoCommand = new Command('wallet-info')
 
       const sequenceWalletAddress = session.account.address
 
+      const fundingUrl = `https://demo.trails.build/?mode=swap&toAddress=${sequenceWalletAddress}&toChainId=137&toToken=0x3c499c542cef5e3811e1192ce70d8cc03d5c3359&apiKey=AQAAAAAAAKhGHJc3N5V2AWqfJ1v9xZ2u0nA&theme=light`
+
       if (json) {
         console.log(
           JSON.stringify(
             {
               eoaAddress,
               sequenceWalletAddress,
+              fundingUrl,
             },
             null,
             2
@@ -75,6 +80,11 @@ export const walletInfoCommand = new Command('wallet-info')
       console.log(
         chalk.yellow('  The Sequence Wallet can pay gas fees with ERC20 tokens (no ETH needed).')
       )
+      console.log('')
+      console.log(chalk.green.bold('Fund your wallet:'))
+      console.log(chalk.green('  Click the link below to fund your Sequence Wallet via Trails:'))
+      console.log('')
+      console.log(chalk.cyan.underline(fundingUrl))
       console.log('')
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)

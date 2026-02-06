@@ -2,7 +2,7 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import { ethers } from 'ethers'
 import { Session } from '@0xsequence/auth'
-import { EXIT_CODES } from '../lib/config.js'
+import { EXIT_CODES, getPrivateKey } from '../lib/config.js'
 import { isValidPrivateKey } from '../lib/wallet.js'
 
 // ERC20 ABI for transfer function
@@ -15,7 +15,7 @@ const ERC20_ABI = [
 
 export const transferCommand = new Command('transfer')
   .description('Send an ERC20 token transfer using Sequence smart wallet')
-  .requiredOption('-k, --private-key <key>', 'Your wallet private key')
+  .option('-k, --private-key <key>', 'Your wallet private key (or use stored encrypted key)')
   .requiredOption('-a, --access-key <key>', 'Project access key')
   .requiredOption('-t, --token <address>', 'ERC20 token contract address')
   .requiredOption('-r, --recipient <address>', 'Recipient address')
@@ -23,12 +23,14 @@ export const transferCommand = new Command('transfer')
   .requiredOption('-c, --chain-id <chainId>', 'Chain ID (e.g., 137 for Polygon)')
   .option('--json', 'Output in JSON format')
   .action(async (options) => {
-    const { privateKey, accessKey, token, recipient, amount, chainId: chainIdStr, json } = options
+    const { accessKey, token, recipient, amount, chainId: chainIdStr, json } = options
 
     // Track wallet address for error reporting
     let walletAddress: string | undefined
 
     try {
+      const privateKey = getPrivateKey(options)
+
       // Validate private key format
       if (!isValidPrivateKey(privateKey)) {
         if (json) {
