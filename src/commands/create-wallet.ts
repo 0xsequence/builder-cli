@@ -37,7 +37,7 @@ export const createWalletCommand = new Command('create-wallet')
       if (stored) {
         console.log(
           chalk.green('✓ Private key encrypted and stored.'),
-          chalk.gray('You won\'t need to pass -k for future commands.')
+          chalk.gray("You won't need to pass -k for future commands.")
         )
       } else {
         console.log(
@@ -51,7 +51,9 @@ export const createWalletCommand = new Command('create-wallet')
       console.log('')
       console.log(chalk.gray('To use this wallet:'))
       console.log(chalk.gray('  1. Fund it with native token for gas fees'))
-      console.log(chalk.gray(`  2. Run: sequence-builder login${stored ? '' : ' -k <your-private-key>'}`))
+      console.log(
+        chalk.gray(`  2. Run: sequence-builder login${stored ? '' : ' -k <your-private-key>'}`)
+      )
       console.log('')
     } catch (error) {
       console.error(

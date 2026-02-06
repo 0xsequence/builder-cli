@@ -167,7 +167,12 @@ async function createProjectAction(
       try {
         const config = loadConfig()
         const passphrase = process.env.SEQUENCE_PASSPHRASE
-        if (config.encryptedPrivateKey && config.encryptionSalt && config.encryptionIv && passphrase) {
+        if (
+          config.encryptedPrivateKey &&
+          config.encryptionSalt &&
+          config.encryptionIv &&
+          passphrase
+        ) {
           const { decryptPrivateKey } = await import('../lib/crypto.js')
           resolvedPrivateKey = decryptPrivateKey(
             {
@@ -185,7 +190,9 @@ async function createProjectAction(
     let sequenceWalletAddress: string | undefined
     if (resolvedPrivateKey && accessKey && isValidPrivateKey(resolvedPrivateKey)) {
       try {
-        const normalizedKey = resolvedPrivateKey.startsWith('0x') ? resolvedPrivateKey : '0x' + resolvedPrivateKey
+        const normalizedKey = resolvedPrivateKey.startsWith('0x')
+          ? resolvedPrivateKey
+          : '0x' + resolvedPrivateKey
         const session = await Session.singleSigner({
           signer: normalizedKey,
           projectAccessKey: accessKey,
