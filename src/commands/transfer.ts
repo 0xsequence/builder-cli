@@ -19,6 +19,56 @@ function formatDuration(ms: number): string {
   return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`
 }
 
+/** Patterns that indicate a rate-limit or permission error in SDK/RPC messages */
+const RATE_LIMIT_PATTERNS = [
+  '429',
+  'too many requests',
+  'rate limit',
+  'retry limit',
+  'rate is too high',
+  'slow down',
+]
+const PERMISSION_DENIED_PATTERNS = ['403', 'permissiondenied', 'permission denied', 'forbidden']
+
+function isRateLimitMessage(msg: string): boolean {
+  const lower = msg.toLowerCase()
+  return RATE_LIMIT_PATTERNS.some((p) => lower.includes(p))
+}
+
+function isPermissionDeniedMessage(msg: string): boolean {
+  const lower = msg.toLowerCase()
+  return PERMISSION_DENIED_PATTERNS.some((p) => lower.includes(p))
+}
+
+/**
+ * Try to extract a clean, human-readable message from ethers/SDK nested errors.
+ * These often embed JSON in an `info.responseBody` field like:
+ *   `{"jsonrpc":"2.0","id":1,"error":{"code":1201,"message":"..."}}`
+ */
+function parseCleanErrorMessage(raw: string): string {
+  // Try to find a JSON "message" inside responseBody
+  const bodyMatch = raw.match(/"responseBody"\s*:\s*"((?:\\"|[^"])*)"/)
+  if (bodyMatch) {
+    try {
+      const body = JSON.parse(`"${bodyMatch[1]}"`) // unescape the string
+      const parsed = JSON.parse(body)
+      if (parsed?.error?.message) {
+        return parsed.error.message
+      }
+    } catch {
+      // fall through
+    }
+  }
+
+  // Try to find responseStatus
+  const statusMatch = raw.match(/"responseStatus"\s*:\s*"([^"]*)"/)
+  if (statusMatch) {
+    return statusMatch[1]
+  }
+
+  return raw
+}
+
 // ERC20 ABI for transfer function
 const ERC20_ABI = [
   'function transfer(address to, uint256 amount) returns (bool)',
@@ -309,7 +359,7 @@ export const transferCommand = new Command('transfer')
         )
       }
 
-      // Check for rate-limit / permission errors
+      // Check for rate-limit / permission errors (structured ApiError from our api.ts)
       if (isApiError(error) && (error.isRateLimited || error.isPermissionDenied)) {
         if (json) {
           console.log(
@@ -349,7 +399,42 @@ export const transferCommand = new Command('transfer')
         process.exit(EXIT_CODES.API_ERROR)
       }
 
-      // Check for common errors
+      // Check for rate-limit / permission in generic error messages (e.g. from Sequence SDK / ethers)
+      const detectedRateLimit = isRateLimitMessage(errorMessage)
+      const detectedPermission = !detectedRateLimit && isPermissionDeniedMessage(errorMessage)
+
+      if (detectedRateLimit || detectedPermission) {
+        const cleanMsg = parseCleanErrorMessage(errorMessage)
+        if (json) {
+          console.log(
+            JSON.stringify({
+              error: detectedRateLimit ? 'Rate limited' : 'Permission denied',
+              detail: cleanMsg,
+              walletAddress,
+              code: EXIT_CODES.API_ERROR,
+              timing: { failedStep: currentStep, failedStepMs, totalElapsedMs },
+            })
+          )
+        } else {
+          if (detectedRateLimit) {
+            console.error(chalk.red('✖ Rate limited — too many requests'))
+            console.error(chalk.yellow(`  ${cleanMsg}`))
+            console.error(chalk.gray('  Wait a minute or two before retrying.'))
+            console.error(
+              chalk.gray('  To increase limits, upgrade your project at https://sequence.build')
+            )
+          } else {
+            console.error(chalk.red('✖ Permission denied'))
+            console.error(chalk.gray('  This can happen when:'))
+            console.error(chalk.gray('    - Your session or ETHAuth proof has expired'))
+            console.error(chalk.gray('    - The access key is invalid or revoked'))
+            console.error(chalk.gray(`  Detail: ${cleanMsg}`))
+          }
+        }
+        process.exit(EXIT_CODES.API_ERROR)
+      }
+
+      // Check for insufficient balance
       if (errorMessage.includes('insufficient') || errorMessage.includes('balance')) {
         if (json) {
           console.log(
@@ -370,33 +455,6 @@ export const transferCommand = new Command('transfer')
           )
         }
         process.exit(EXIT_CODES.INSUFFICIENT_FUNDS)
-      }
-
-      // Check for 403/rate-limit in generic error messages (e.g. from Sequence SDK)
-      if (
-        errorMessage.includes('403') ||
-        errorMessage.toLowerCase().includes('permissiondenied') ||
-        errorMessage.toLowerCase().includes('rate limit')
-      ) {
-        if (json) {
-          console.log(
-            JSON.stringify({
-              error: 'Permission denied or rate limited',
-              detail: errorMessage,
-              walletAddress,
-              code: EXIT_CODES.API_ERROR,
-              timing: { failedStep: currentStep, failedStepMs, totalElapsedMs },
-            })
-          )
-        } else {
-          console.error(chalk.red('✖ Permission denied or rate limited'))
-          console.error(chalk.gray('  This can happen when:'))
-          console.error(chalk.gray('    - Too many signing attempts in a short period'))
-          console.error(chalk.gray('    - Your session or ETHAuth proof has expired'))
-          console.error(chalk.gray('    - The access key is invalid or revoked'))
-          console.error(chalk.gray(`  Detail: ${errorMessage}`))
-        }
-        process.exit(EXIT_CODES.API_ERROR)
       }
 
       if (json) {
