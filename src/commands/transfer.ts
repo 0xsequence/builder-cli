@@ -4,6 +4,20 @@ import { ethers } from 'ethers'
 import { Session } from '@0xsequence/auth'
 import { EXIT_CODES, getPrivateKey } from '../lib/config.js'
 import { isValidPrivateKey } from '../lib/wallet.js'
+import { isApiError } from '../lib/api.js'
+import { extractErrorMessage } from '../lib/errors.js'
+
+/**
+ * Format a duration in milliseconds to a human-readable string.
+ * e.g. 350 -> "350ms", 1200 -> "1.2s", 65000 -> "1m 5s"
+ */
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+  const mins = Math.floor(ms / 60000)
+  const secs = Math.round((ms % 60000) / 1000)
+  return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`
+}
 
 // ERC20 ABI for transfer function
 const ERC20_ABI = [
@@ -25,8 +39,11 @@ export const transferCommand = new Command('transfer')
   .action(async (options) => {
     const { accessKey, token, recipient, amount, chainId: chainIdStr, json } = options
 
-    // Track wallet address for error reporting
+    // Track wallet address and timing for error reporting
     let walletAddress: string | undefined
+    const overallStart = performance.now()
+    let currentStep = 'initializing'
+    let stepStart = overallStart
 
     try {
       const privateKey = getPrivateKey(options)
@@ -93,10 +110,18 @@ export const transferCommand = new Command('transfer')
       }
 
       // Create Sequence session
+      currentStep = 'creating session'
+      stepStart = performance.now()
+      const sessionStart = stepStart
       const session = await Session.singleSigner({
         signer: normalizedPrivateKey,
         projectAccessKey: accessKey,
       })
+      const sessionMs = Math.round(performance.now() - sessionStart)
+
+      if (!json) {
+        console.log(chalk.gray('Session created'), chalk.gray(`(${formatDuration(sessionMs)})`))
+      }
 
       // Get signer with fee options - automatically select first available fee token
       const signer = session.account.getSigner(chainId, {
@@ -186,21 +211,35 @@ export const transferCommand = new Command('transfer')
       }
 
       // Populate the transaction
+      currentStep = 'preparing transaction'
+      stepStart = performance.now()
       const txn = await contract.transfer.populateTransaction(recipient, amountParsed)
 
       // Send the transaction
       if (!json) {
         console.log(chalk.gray('Submitting to relayer...'))
       }
+      currentStep = 'submitting to relayer'
+      stepStart = performance.now()
+      const sendStart = stepStart
       const txResponse = await signer.sendTransaction(txn)
+      const sendMs = Math.round(performance.now() - sendStart)
 
       if (!json) {
-        console.log(chalk.gray('Transaction submitted:'), chalk.cyan(txResponse.hash))
+        console.log(
+          chalk.gray('Transaction submitted:'),
+          chalk.cyan(txResponse.hash),
+          chalk.gray(`(${formatDuration(sendMs)})`)
+        )
         console.log(chalk.gray('Waiting for confirmation...'))
       }
 
       // Wait for the transaction to be mined (with timeout)
+      currentStep = 'waiting for confirmation'
+      stepStart = performance.now()
+      const confirmStart = stepStart
       const receipt = await txResponse.wait(undefined, 30000)
+      const confirmMs = Math.round(performance.now() - confirmStart)
 
       if (!receipt) {
         if (json) {
@@ -212,6 +251,8 @@ export const transferCommand = new Command('transfer')
         }
         process.exit(EXIT_CODES.GENERAL_ERROR)
       }
+
+      const totalMs = sessionMs + sendMs + confirmMs
 
       if (json) {
         console.log(
@@ -225,6 +266,12 @@ export const transferCommand = new Command('transfer')
               amount,
               symbol,
               chainId,
+              timing: {
+                sessionMs,
+                sendMs,
+                confirmMs,
+                totalMs,
+              },
             },
             null,
             2
@@ -233,6 +280,7 @@ export const transferCommand = new Command('transfer')
         return
       }
 
+      console.log(chalk.gray('Confirmed'), chalk.gray(`(${formatDuration(confirmMs)})`))
       console.log('')
       console.log(chalk.green.bold('✓ Transfer successful!'))
       console.log('')
@@ -241,8 +289,67 @@ export const transferCommand = new Command('transfer')
       console.log(chalk.white('To:              '), chalk.gray(recipient))
       console.log(chalk.white('Amount:          '), chalk.white(`${amount} ${symbol}`))
       console.log('')
+      console.log(
+        chalk.gray(
+          `Timing: session ${formatDuration(sessionMs)}, send ${formatDuration(sendMs)}, confirm ${formatDuration(confirmMs)}, total ${formatDuration(totalMs)}`
+        )
+      )
+      console.log('')
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorMessage = extractErrorMessage(error)
+      const failedStepMs = Math.round(performance.now() - stepStart)
+      const totalElapsedMs = Math.round(performance.now() - overallStart)
+
+      // Always show timing context for the failed step
+      if (!json) {
+        console.error(
+          chalk.gray(
+            `Failed during "${currentStep}" after ${formatDuration(failedStepMs)} (total elapsed: ${formatDuration(totalElapsedMs)})`
+          )
+        )
+      }
+
+      // Check for rate-limit / permission errors
+      if (isApiError(error) && (error.isRateLimited || error.isPermissionDenied)) {
+        if (json) {
+          console.log(
+            JSON.stringify({
+              error: error.isRateLimited ? 'Rate limited' : 'Permission denied',
+              statusCode: error.statusCode,
+              retryAfterSeconds: error.retryAfterSeconds,
+              detail: error.errorBody,
+              walletAddress,
+              code: EXIT_CODES.API_ERROR,
+              timing: { failedStep: currentStep, failedStepMs, totalElapsedMs },
+            })
+          )
+        } else {
+          if (error.isRateLimited) {
+            console.error(chalk.red('✖ Rate limited by the API'))
+            if (error.retryAfterSeconds !== null) {
+              console.error(
+                chalk.yellow(`  Retry after: ${error.retryAfterSeconds}s`)
+              )
+            }
+            console.error(chalk.gray('  You have made too many requests. Please wait before trying again.'))
+          } else {
+            console.error(chalk.red('✖ Permission denied (403)'))
+            console.error(chalk.gray('  This can happen when:'))
+            console.error(chalk.gray('    - Your session or ETHAuth proof has expired'))
+            console.error(chalk.gray('    - You have exceeded the signing rate limit'))
+            console.error(chalk.gray('    - The access key is invalid or revoked'))
+            if (error.retryAfterSeconds !== null) {
+              console.error(
+                chalk.yellow(`  Retry after: ${error.retryAfterSeconds}s`)
+              )
+            }
+          }
+          if (error.errorBody) {
+            console.error(chalk.gray(`  Server response: ${error.errorBody}`))
+          }
+        }
+        process.exit(EXIT_CODES.API_ERROR)
+      }
 
       // Check for common errors
       if (errorMessage.includes('insufficient') || errorMessage.includes('balance')) {
@@ -252,6 +359,7 @@ export const transferCommand = new Command('transfer')
               error: 'Insufficient balance',
               walletAddress,
               code: EXIT_CODES.INSUFFICIENT_FUNDS,
+              timing: { failedStep: currentStep, failedStepMs, totalElapsedMs },
             })
           )
         } else {
@@ -266,8 +374,31 @@ export const transferCommand = new Command('transfer')
         process.exit(EXIT_CODES.INSUFFICIENT_FUNDS)
       }
 
+      // Check for 403/rate-limit in generic error messages (e.g. from Sequence SDK)
+      if (errorMessage.includes('403') || errorMessage.toLowerCase().includes('permissiondenied') || errorMessage.toLowerCase().includes('rate limit')) {
+        if (json) {
+          console.log(
+            JSON.stringify({
+              error: 'Permission denied or rate limited',
+              detail: errorMessage,
+              walletAddress,
+              code: EXIT_CODES.API_ERROR,
+              timing: { failedStep: currentStep, failedStepMs, totalElapsedMs },
+            })
+          )
+        } else {
+          console.error(chalk.red('✖ Permission denied or rate limited'))
+          console.error(chalk.gray('  This can happen when:'))
+          console.error(chalk.gray('    - Too many signing attempts in a short period'))
+          console.error(chalk.gray('    - Your session or ETHAuth proof has expired'))
+          console.error(chalk.gray('    - The access key is invalid or revoked'))
+          console.error(chalk.gray(`  Detail: ${errorMessage}`))
+        }
+        process.exit(EXIT_CODES.API_ERROR)
+      }
+
       if (json) {
-        console.log(JSON.stringify({ error: errorMessage, code: EXIT_CODES.GENERAL_ERROR }))
+        console.log(JSON.stringify({ error: errorMessage, code: EXIT_CODES.GENERAL_ERROR, timing: { failedStep: currentStep, failedStepMs, totalElapsedMs } }))
       } else {
         console.error(chalk.red('✖ Transfer failed:'), errorMessage)
       }

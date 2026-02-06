@@ -3,6 +3,7 @@ import chalk from 'chalk'
 import { Session } from '@0xsequence/auth'
 import { EXIT_CODES, getPrivateKey } from '../lib/config.js'
 import { isValidPrivateKey, getAddressFromPrivateKey } from '../lib/wallet.js'
+import { extractErrorMessage } from '../lib/errors.js'
 
 export const walletInfoCommand = new Command('wallet-info')
   .description('Show wallet addresses (EOA and Sequence smart wallet)')
@@ -87,7 +88,7 @@ export const walletInfoCommand = new Command('wallet-info')
       console.log(chalk.cyan.underline(fundingUrl))
       console.log('')
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorMessage = extractErrorMessage(error)
       if (json) {
         console.log(JSON.stringify({ error: errorMessage, code: EXIT_CODES.GENERAL_ERROR }))
       } else {

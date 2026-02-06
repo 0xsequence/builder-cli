@@ -47,6 +47,84 @@ export interface ListAccessKeysResponse {
 }
 
 /**
+ * Structured API error with status code, rate-limit info, and parsed details
+ */
+export class ApiError extends Error {
+  public readonly statusCode: number
+  public readonly retryAfterSeconds: number | null
+  public readonly errorBody: string
+  public readonly isRateLimited: boolean
+  public readonly isPermissionDenied: boolean
+  public readonly isUnauthorized: boolean
+
+  constructor(statusCode: number, errorBody: string, retryAfter: number | null) {
+    const label = statusCode === 429
+      ? 'Rate Limited'
+      : statusCode === 403
+        ? 'Permission Denied'
+        : statusCode === 401
+          ? 'Unauthorized'
+          : `API Error`
+
+    let detail = `${label} (${statusCode})`
+    if (errorBody) {
+      detail += `: ${errorBody}`
+    }
+    if (retryAfter !== null) {
+      detail += ` — retry after ${retryAfter}s`
+    }
+
+    super(detail)
+    this.name = 'ApiError'
+    this.statusCode = statusCode
+    this.retryAfterSeconds = retryAfter
+    this.errorBody = errorBody
+    this.isRateLimited = statusCode === 429
+    this.isPermissionDenied = statusCode === 403
+    this.isUnauthorized = statusCode === 401
+  }
+}
+
+/**
+ * Check whether an error is an ApiError (useful in catch blocks)
+ */
+export function isApiError(error: unknown): error is ApiError {
+  return error instanceof ApiError
+}
+
+/**
+ * Parse Retry-After header value into seconds.
+ * Supports both delta-seconds ("120") and HTTP-date formats.
+ */
+function parseRetryAfter(header: string | null): number | null {
+  if (!header) return null
+
+  // Try as integer seconds first
+  const seconds = parseInt(header, 10)
+  if (!isNaN(seconds) && seconds >= 0) {
+    return seconds
+  }
+
+  // Try as HTTP-date (e.g. "Fri, 06 Feb 2026 12:00:00 GMT")
+  const date = new Date(header)
+  if (!isNaN(date.getTime())) {
+    const delta = Math.max(0, Math.ceil((date.getTime() - Date.now()) / 1000))
+    return delta
+  }
+
+  return null
+}
+
+/**
+ * Build an ApiError from a failed fetch Response
+ */
+async function buildApiError(response: Response): Promise<ApiError> {
+  const errorText = await response.text()
+  const retryAfter = parseRetryAfter(response.headers.get('Retry-After'))
+  return new ApiError(response.status, errorText, retryAfter)
+}
+
+/**
  * Make an API request to the Builder API
  */
 async function apiRequest<T>(
@@ -73,8 +151,7 @@ async function apiRequest<T>(
   })
 
   if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`API Error (${response.status}): ${errorText}`)
+    throw await buildApiError(response)
   }
 
   return response.json() as Promise<T>
@@ -107,8 +184,7 @@ async function quotaApiRequest<T>(
   })
 
   if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`API Error (${response.status}): ${errorText}`)
+    throw await buildApiError(response)
   }
 
   return response.json() as Promise<T>
